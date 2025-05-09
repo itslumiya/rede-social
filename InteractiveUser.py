@@ -5,12 +5,11 @@ import threading
 from datetime import datetime
 import time
 
-ctx = zmq.Context()
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.connect("tcp://localhost:5555")
 
-req = ctx.socket(zmq.REQ)
-req.connect("tcp://localhost:5555")
-
-sub = ctx.socket(zmq.SUB)
+sub = context.socket(zmq.SUB)
 sub.connect("tcp://localhost:5557")
 
 messages = []
@@ -46,8 +45,8 @@ def ValidateIndexUser(followUserInput, usersLength):
 
 def SendToServer(msg):
     msg_p = msgpack.packb(msg)
-    req.send(msg_p)
-    reply_p = req.recv()
+    socket.send(msg_p)
+    reply_p = socket.recv()
     return msgpack.unpackb(reply_p)
 
 def ReceiveNotifications():

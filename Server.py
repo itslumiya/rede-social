@@ -1,15 +1,12 @@
 import zmq
 import msgpack
 
-ctx = zmq.Context()
+context = zmq.Context()
+socket = context.socket(zmq.REP)
+socket.connect("tcp://localhost:5556")
 
-# REQ/REP: Responde a requisições do cliente
-rep = ctx.socket(zmq.REP)
-rep.bind("tcp://*:5555")  # Canal de requisição (REQ/REP)
-
-# PUB: Publica mensagens para os clientes via proxy
-pub = ctx.socket(zmq.PUB)
-pub.connect("tcp://localhost:5556")  # Conectar ao XSUB do proxy
+pub = context.socket(zmq.PUB)
+pub.connect("tcp://localhost:5558") 
 
 logged_users = []
 messages = {}
@@ -23,7 +20,7 @@ def ValidateUsername(username):
         return True
 
 while True:
-    msg_p = rep.recv()
+    msg_p = socket.recv()
     msg = msgpack.unpackb(msg_p)
     
     function = str(msg["Function"])
@@ -33,7 +30,7 @@ while True:
         usernameIsValid = ValidateUsername(username)
         ans = {"usernameIsValid": usernameIsValid}
         ans_p = msgpack.packb(ans)
-        rep.send(ans_p)
+        socket.send(ans_p)
     elif(function == "ShowAllTopics"):
         username = str(msg["Username"])
         allTopics = list(logged_users)
@@ -41,7 +38,7 @@ while True:
             allTopics.remove(username)
         ans = {"Topics": allTopics}
         ans_p = msgpack.packb(ans)
-        rep.send(ans_p)
+        socket.send(ans_p)
     elif(function == "PublishMessage"):
         username = str(msg["Username"])
         message = str(msg["Message"])
@@ -56,7 +53,7 @@ while True:
         pub.send_string(f"{topic}: " + data)
         ans = {"StatusPublish": "Mensagem publicada"}
         ans_p = msgpack.packb(ans)
-        rep.send(ans_p)
+        socket.send(ans_p)
     elif(function == "SendPrivateMessage"):
         messageTo = str(msg["To"])
         messageFrom = str(msg["From"])
@@ -113,7 +110,7 @@ while True:
         pub.send_string(f"{topic}: " + data)
         ans = {"StatusSendMessage": "Mensagem enviada"}
         ans_p = msgpack.packb(ans)
-        rep.send(ans_p)
+        socket.send(ans_p)
     elif(function == "GetPrivateMessages"):
         username = str(msg["Username"])
         chatWith = str(msg["ChatWith"])
@@ -127,6 +124,6 @@ while True:
                 status = "Found"
         ans = {"StatusFoundMessage": status, "Messages": messages}
         ans_p = msgpack.packb(ans)
-        rep.send(ans_p)
+        socket.send(ans_p)
 server.close()
 ctx.close()

@@ -6,7 +6,7 @@ xpub = ctx.socket(zmq.XPUB)
 xpub.bind("tcp://*:5557")
 
 xsub = ctx.socket(zmq.XSUB)
-xsub.bind("tcp://*:5556")
+xsub.bind("tcp://*:5558")
 
 zmq.proxy(xsub, xpub)
 
