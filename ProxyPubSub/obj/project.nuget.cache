@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "dgSpecHash": "nbdYUd9uLpz7k1FQsc3zhGQp/LE9pZ5pWBjQb9MvXa+J4O6wZA2lp00lo3s1OB7pvBMhhyoMxgtncJSzwJk+Ww==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\user\\Desktop\\rede-social\\ProxyPubSub\\ProxyPubSub.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\user\\.nuget\\packages\\asyncio\\0.1.69\\asyncio.0.1.69.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\microsoft.extensions.objectpool\\8.0.10\\microsoft.extensions.objectpool.8.0.10.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\nacl.net\\0.1.13\\nacl.net.0.1.13.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\netmq\\4.0.1.15\\netmq.4.0.1.15.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\system.security.cryptography.pkcs\\8.0.1\\system.security.cryptography.pkcs.8.0.1.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\system.security.cryptography.xml\\8.0.2\\system.security.cryptography.xml.8.0.2.nupkg.sha512",
+    "C:\\Users\\user\\.nuget\\packages\\system.servicemodel.primitives\\8.1.1\\system.servicemodel.primitives.8.1.1.nupkg.sha512"
+  ],
+  "logs": []
+}
