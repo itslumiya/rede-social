@@ -2,8 +2,9 @@ import zmq
 import msgpack
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timestamp
 import time
+import random
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
@@ -15,6 +16,7 @@ sub.connect("tcp://localhost:5557")
 messages = []
 allMessages = {} 
 followedUsers = []
+timestampClient = datetime.now()
 
 def ValidateUsername(name):
     while True:
@@ -51,6 +53,7 @@ def SendToServer(msg):
 
 def ReceiveNotifications():
     while True:
+        global timestampClient
         try:
             msg = sub.recv_string()
             topic, dados = msg.split(" ", 1)
@@ -62,13 +65,34 @@ def ReceiveNotifications():
             timestamp = campos.get("Timestamp", "Desconhecido")
             message = campos.get("Message", "Sem mensagem")
 
+            if(timestampClient < timestamp):
+                msg = {"Function": "GetCoordinatorTime"}
+                reply = SendToServer(msg)
+                timestampServer = reply["ServerClock"]
+                timestampClient = timestampServer
+
             if(topic == ("Private" + username)):
                 formatedMessage = (f"PRIVADO: {username} ({timestamp}) diz {message}")
             else:
                 formatedMessage = (f"{username} ({timestamp}) diz {message}")
+            
             messages.append(formatedMessage)
         except zmq.Again:
             pass
+
+def DelayOrNot():
+    global timestampClient
+    numero1 = random.randint(0, 5)
+    numero2 = random.randint(0, 5)
+    changeTimestamp = random.randint(0, 1)
+
+    if(changeTimestamp == 1):
+        if(numero1 == numero2):
+            timestampClient = timestampClient + timedelta(seconds=1)
+            print("Adiantado 1 segundo")
+        else:
+            timestampClient = timestampClient - timedelta(seconds=1)
+            print("Atrasando 1 segundo")
 
 print("==================================================================")
 print("                       BEM VINDO A REDE SOCIAL                    ")
@@ -101,6 +125,8 @@ os.system('cls')
 
 def Menu():
     while True:
+        global timestampClient
+        DelayOrNot()
         if messages:
             print("==================================================================")
             print("                           NOTIFICAÇÕES                           ")
@@ -125,10 +151,11 @@ def Menu():
         if userOption == "1":
             messageInput = input("Digite a mensagem a ser publicada: ")
             message = ValidateMessage(messageInput)
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = {"Function": "PublishMessage", "Message": message, "Username": username, "Timestamp": timestamp}
+            timestamp = datetime.now()
+            msg = {"Function": "PublishMessage", "Message": message, "Username": username, "Timestamp": timestamp.strftime("%d/%m/%Y %H:%M:%S")}
             reply = SendToServer(msg)
             time.sleep(1)
+            timestampClient = timestampClient + timedelta(seconds=1)
             os.system('cls')
         elif(userOption == "2"):
             msg = {"Function": "ShowAllTopics", "Username": username}
@@ -150,6 +177,7 @@ def Menu():
             print(f"               Usuario {topic} seguido com sucesso                ")
             print( "------------------------------------------------------------------")
             time.sleep(1)
+            timestampClient = timestampClient + timedelta(seconds=1)
             os.system('cls')
         elif userOption == "3":
             print("==================================================================")
@@ -182,18 +210,21 @@ def Menu():
                     print( "------------------------------------------------------------------")
             messageInput = input(f"Digite a mensagem a ser enviada para {usernameChat}: ")
             message = ValidateMessage(messageInput)
-            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            msg = {"Function": "SendPrivateMessage", "Message": message, "From": username, "Timestamp": timestamp, "To": usernameChat}
+            timestamp = datetime.now()
+            msg = {"Function": "SendPrivateMessage", "Message": message, "From": username, "Timestamp": timestamp.strftime("%d/%m/%Y %H:%M:%S"), "To": usernameChat}
             reply = SendToServer(msg)
             time.sleep(1)
             os.system('cls')
+            timestampClient = timestampClient + timedelta(seconds=1)
         elif userOption == "6":
             os.system('cls')
+            timestampClient = timestampClient + timedelta(seconds=1)
         elif userOption == "0":
             print("Saindo do sistema...")
             break
         else:
             os.system('cls')
+            timestampClient = timestampClient + timedelta(seconds=1)
 
 t = threading.Thread(target=ReceiveNotifications, daemon=True)
 t.start()

@@ -1,5 +1,6 @@
 import zmq
 import msgpack
+from datetime import datetime
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
@@ -123,6 +124,11 @@ while True:
                 messages = privateMessages[username][index]["Messages"]
                 status = "Found"
         ans = {"StatusFoundMessage": status, "Messages": messages}
+        ans_p = msgpack.packb(ans)
+        socket.send(ans_p)
+    elif(function == "GetCoordinatorTime"):
+        serverDatetime = datetime.now()
+        ans = {"ServerClock": serverDatetime}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
 server.close()
