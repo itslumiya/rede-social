@@ -2,9 +2,8 @@ import zmq
 import msgpack
 import os
 import threading
-from datetime import datetime, timestamp
+from datetime import datetime, timedelta
 import time
-import random
 
 context = zmq.Context()
 socket = context.socket(zmq.REQ)
@@ -54,45 +53,54 @@ def SendToServer(msg):
 def ReceiveNotifications():
     while True:
         global timestampClient
+        global username
+
         try:
             msg = sub.recv_string()
-            topic, dados = msg.split(" ", 1)
+            topic, dados = msg.split(":", 1)
 
-            partes = dados.split("|")
-            campos = dict(p.split(":", 1) for p in partes)
-
-            username = campos.get("Username", "Desconhecido")
-            timestamp = campos.get("Timestamp", "Desconhecido")
-            message = campos.get("Message", "Sem mensagem")
-
-            if(timestampClient < timestamp):
-                msg = {"Function": "GetCoordinatorTime"}
-                reply = SendToServer(msg)
-                timestampServer = reply["ServerClock"]
-                timestampClient = timestampServer
-
-            if(topic == ("Private" + username)):
-                formatedMessage = (f"PRIVADO: {username} ({timestamp}) diz {message}")
+            if(topic == "Fruta"):
+                formatedMessage = f"[Notificação] {dados.strip()}"
+                messages.append(formatedMessage)
             else:
-                formatedMessage = (f"{username} ({timestamp}) diz {message}")
-            
-            messages.append(formatedMessage)
+                partes = dados.split("|")
+                campos = dict((k.strip(), v.strip()) for k, v in (p.split(":", 1) for p in partes))
+                messageFrom = campos.get("Username", "Desconhecido")
+                timestamp = datetime.strptime(campos.get("Timestamp", "Desconhecido"), "%d/%m/%Y %H:%M:%S")
+                message = campos.get("Message", "Sem mensagem")
+
+                if(timestampClient < timestamp):
+                    msg = {"Function": "GetCoordinatorTime"}
+                    reply = SendToServer(msg)
+                    timestampServer = datetime.strptime(reply["ServerClock"], "%d/%m/%Y %H:%M:%S")
+                    timestampClient = timestampServer
+
+                stringTimestamp = timestamp.strftime("%d/%m/%Y %H:%M:%S")
+
+                if(topic == "Private" + username):
+                    formatedMessage = f"PRIVADO: {messageFrom} ({stringTimestamp}) diz {message}"
+                    messages.append(formatedMessage)
+                else:
+                    formatedMessage = f"{messageFrom} ({stringTimestamp}) diz {message}"
+                    messages.append(formatedMessage)
+
         except zmq.Again:
             pass
 
-def DelayOrNot():
+def Delay():
     global timestampClient
-    numero1 = random.randint(0, 5)
-    numero2 = random.randint(0, 5)
-    changeTimestamp = random.randint(0, 1)
+    timestampClient = timestampClient - timedelta(seconds=1)
 
-    if(changeTimestamp == 1):
-        if(numero1 == numero2):
-            timestampClient = timestampClient + timedelta(seconds=1)
-            print("Adiantado 1 segundo")
-        else:
-            timestampClient = timestampClient - timedelta(seconds=1)
-            print("Atrasando 1 segundo")
+def Advance():
+    global timestampClient
+    timestampClient = timestampClient + timedelta(seconds=1)
+
+def SynchronizeWithServer():
+    global timestampClient
+    msg = {"Function": "GetCoordinatorTime"}
+    reply = SendToServer(msg)
+    timestampServer = datetime.strptime(reply["ServerClock"], "%d/%m/%Y %H:%M:%S")
+    timestampClient = timestampServer
 
 print("==================================================================")
 print("                       BEM VINDO A REDE SOCIAL                    ")
@@ -114,6 +122,7 @@ while(usernameIsValid != True):
 
 privateTopic = "Private" + username
 sub.setsockopt_string(zmq.SUBSCRIBE, privateTopic)
+sub.setsockopt_string(zmq.SUBSCRIBE, "Fruta")
 
 os.system('cls') 
 print("------------------------------------------------------------------")
@@ -122,11 +131,13 @@ print("------------------------------------------------------------------")
 time.sleep(1)
 os.system('cls')
 
-
 def Menu():
     while True:
         global timestampClient
-        DelayOrNot()
+        stringTimestampClient = timestampClient.strftime("%d/%m/%Y %H:%M:%S")
+        
+        print("==================================================================")
+        print(f"                                     Horário: {stringTimestampClient}")
         if messages:
             print("==================================================================")
             print("                           NOTIFICAÇÕES                           ")
@@ -141,19 +152,28 @@ def Menu():
         print("1 - Publicar um texto")
         print("2 - Seguir um usuário")
         print("3 - Enviar uma mensagem privada")
-        print("4 - Atualizar notificações")
+        print("4 - Visualizar chat privado")
         print("5 - Ver todas as publicações de um usuário específico")
+        print("6 - Atrasar 1 segundo")
+        print("7 - Adiantar 1 segundo")
+        print("8 - Sincronizar com Servidor")
         print("0 - Sair")
         print("==================================================================")
         userOption = input("Digite a opção desejada: ")
 
         os.system('cls')
         if userOption == "1":
+            print("==================================================================")
+            print("                         PUBLICAR MENSAGEM                        ")
+            print("==================================================================")
             messageInput = input("Digite a mensagem a ser publicada: ")
             message = ValidateMessage(messageInput)
-            timestamp = datetime.now()
-            msg = {"Function": "PublishMessage", "Message": message, "Username": username, "Timestamp": timestamp.strftime("%d/%m/%Y %H:%M:%S")}
+            msg = {"Function": "PublishMessage", "Message": message, "Username": username, "Timestamp": timestampClient.strftime("%d/%m/%Y %H:%M:%S")}
             reply = SendToServer(msg)
+            os.system('cls')
+            print("==================================================================")
+            print("                  MENSAGEM PUBLICADA COM SUCESSO                  ")
+            print("==================================================================")
             time.sleep(1)
             timestampClient = timestampClient + timedelta(seconds=1)
             os.system('cls')
@@ -162,22 +182,28 @@ def Menu():
             reply = SendToServer(msg)
             allUsers = reply['Topics']
             users = list(set(allUsers) - set(followedUsers))
-            print("==================================================================")
-            print("                 USUÁRIOS DISPONÍVEIS PARA SEGUIR                 ")
-            print("==================================================================")
-            for index, user in enumerate(users, start=1):
-                print(f"{index} - {user}")
-            print("==================================================================")
-            followUserInput = input("Digite o número do usuário que você deseja seguir: ")
-            followUser = ValidateIndexUser(followUserInput, len(users))
-            topic = users[followUser]
-            followedUsers.append(topic)
-            sub.setsockopt_string(zmq.SUBSCRIBE, topic)
-            print( "------------------------------------------------------------------")
-            print(f"               Usuario {topic} seguido com sucesso                ")
-            print( "------------------------------------------------------------------")
-            time.sleep(1)
+            if(len(users) > 0):
+                print("==================================================================")
+                print("                 USUÁRIOS DISPONÍVEIS PARA SEGUIR                 ")
+                print("==================================================================")
+                for index, user in enumerate(users, start=1):
+                    print(f"{index} - {user}")
+                print("==================================================================")
+                followUserInput = input("Digite o número do usuário que você deseja seguir: ")
+                followUser = ValidateIndexUser(followUserInput, len(users))
+                userToFollow = users[followUser]
+                followedUsers.append(userToFollow)
+                sub.setsockopt_string(zmq.SUBSCRIBE, userToFollow)
+                os.system('cls')
+                print( "------------------------------------------------------------------")
+                print(f"                   USUARIO SEGUIDO COM SUCESSO                    ")
+                print( "------------------------------------------------------------------")
+            else:
+                print("==================================================================")
+                print("             NÃO HÁ USUÁRIOS DISPONÍVEIS PARA SEGUIR              ")
+                print("==================================================================")
             timestampClient = timestampClient + timedelta(seconds=1)
+            time.sleep(1)
             os.system('cls')
         elif userOption == "3":
             print("==================================================================")
@@ -186,45 +212,135 @@ def Menu():
             msg = {"Function": "ShowAllTopics", "Username": username}
             reply = SendToServer(msg)
             allUsers = reply['Topics']
-            for index, user in enumerate(allUsers, start=1):
-                print(f"{index} - {user}")
-            print("==================================================================")
-            beginChatWithInput = input("Digite o número do usuário que você deseja abrir o chat privado: ")
-            beginChatWith = ValidateIndexUser(beginChatWithInput, len(allUsers))
-            usernameChat = allUsers[beginChatWith]
-            os.system('cls')
-            print("==================================================================")
-            print("                           CHAT PRIVADO                           ")
-            print("==================================================================")
-            print(f"CONVERSANDO COM {usernameChat}")
-            print("==================================================================")
-            msg = {"Function": "GetPrivateMessages", "Username": username, "ChatWith": usernameChat}
-            reply = SendToServer(msg)
-            messagesFound = reply['StatusFoundMessage']
-            if(messagesFound == "Found"):
-                chatMessages = reply['Messages']
-                sortedMessages = sorted(chatMessages, key=lambda msg: datetime.strptime(msg["Timestamp"], '%Y-%m-%d %H:%M:%S'))
-                for message in sortedMessages:
-                    print(f"{message['Username']}: {message['Message']}")
-                    print(f"{message['Timestamp']}")
-                    print( "------------------------------------------------------------------")
-            messageInput = input(f"Digite a mensagem a ser enviada para {usernameChat}: ")
-            message = ValidateMessage(messageInput)
-            timestamp = datetime.now()
-            msg = {"Function": "SendPrivateMessage", "Message": message, "From": username, "Timestamp": timestamp.strftime("%d/%m/%Y %H:%M:%S"), "To": usernameChat}
-            reply = SendToServer(msg)
+            if(len(allUsers) > 0):
+                for index, user in enumerate(allUsers, start=1):
+                    print(f"{index} - {user}")
+                print("==================================================================")
+                beginChatWithInput = input("Digite o número do usuário que você deseja abrir o chat privado: ")
+                beginChatWith = ValidateIndexUser(beginChatWithInput, len(allUsers))
+                usernameChat = allUsers[beginChatWith]
+                os.system('cls')
+                print("==================================================================")
+                print("                           CHAT PRIVADO                           ")
+                print("==================================================================")
+                print(f"CONVERSANDO COM {usernameChat}")
+                print("==================================================================")
+                msg = {"Function": "GetPrivateMessages", "Username": username, "ChatWith": usernameChat}
+                reply = SendToServer(msg)
+                messagesFound = reply['StatusFoundMessage']
+                if(messagesFound == "Found"):
+                    chatMessages = reply['Messages']
+                    sortedMessages = sorted(chatMessages, key=lambda msg: datetime.strptime(msg["Timestamp"], "%d/%m/%Y %H:%M:%S"))
+                    for message in sortedMessages:
+                        print(f"{message['Username']}: {message['Message']}")
+                        print(f"{message['Timestamp']}")
+                        print( "------------------------------------------------------------------")
+                print("==================================================================")
+                messageInput = input(f"Digite a mensagem a ser enviada para {usernameChat}: ")
+                message = ValidateMessage(messageInput)
+                timestamp = timestampClient
+                msg = {"Function": "SendPrivateMessage", "Message": message, "From": username, "Timestamp": timestamp.strftime("%d/%m/%Y %H:%M:%S"), "To": usernameChat}
+                reply = SendToServer(msg)
+                os.system('cls')
+                print("==================================================================")
+                print("               MENSAGEM PRIVADA ENVIADA COM SUCESSO               ")
+                print("==================================================================")
+            else:
+                print("==================================================================")
+                print("      NÃO HÁ USUÁRIOS DISPONÍVEIS PARA ABRIR UM CHAT PRIVADO      ")
+                print("==================================================================")
             time.sleep(1)
             os.system('cls')
             timestampClient = timestampClient + timedelta(seconds=1)
-        elif userOption == "6":
+        elif userOption == "4":
+            print("==================================================================")
+            print("                           CHAT PRIVADO                           ")
+            print("==================================================================")
+            msg = {"Function": "ShowAllTopics", "Username": username}
+            reply = SendToServer(msg)
+            allUsers = reply['Topics']
+            if(len(allUsers) > 0):
+                for index, user in enumerate(allUsers, start=1):
+                    print(f"{index} - {user}")
+                print("==================================================================")
+                beginChatWithInput = input("Digite o número do usuário que você deseja abrir o chat privado: ")
+                beginChatWith = ValidateIndexUser(beginChatWithInput, len(allUsers))
+                usernameChat = allUsers[beginChatWith]
+                os.system('cls')
+                print("==================================================================")
+                print("                           CHAT PRIVADO                           ")
+                print("==================================================================")
+                print(f"CONVERSANDO COM {usernameChat}")
+                print("==================================================================")
+                msg = {"Function": "GetPrivateMessages", "Username": username, "ChatWith": usernameChat}
+                reply = SendToServer(msg)
+                messagesFound = reply['StatusFoundMessage']
+                if(messagesFound == "Found"):
+                    chatMessages = reply['Messages']
+                    sortedMessages = sorted(chatMessages, key=lambda msg: datetime.strptime(msg["Timestamp"], "%d/%m/%Y %H:%M:%S"))
+                    for message in sortedMessages:
+                        print(f"{message['Username']}: {message['Message']}")
+                        print(f"{message['Timestamp']}")
+                        print( "------------------------------------------------------------------")
+                print("==================================================================")
+                input("Pressione ENTER para voltar para o menu...")
+            else:
+                print("==================================================================")
+                print("      NÃO HÁ USUÁRIOS DISPONÍVEIS PARA ABRIR UM CHAT PRIVADO      ")
+                print("==================================================================")
+                time.sleep(1)
             os.system('cls')
             timestampClient = timestampClient + timedelta(seconds=1)
+        elif userOption == "5":
+            print("==================================================================")
+            print("              VER TODAS AS PUBLICAÇÕES DE UM USUÁRIO              ")
+            print("==================================================================")
+            msg = {"Function": "ShowAllTopics", "Username": username}
+            reply = SendToServer(msg)
+            allUsers = reply['Topics']
+            if(len(allUsers) > 0):
+                for index, user in enumerate(allUsers, start=1):
+                    print(f"{index} - {user}")
+                print("==================================================================")
+                showAllPostsInput = input("Digite o número do usuário que você deseja ver todas as publicações: ")
+                showAllPosts = ValidateIndexUser(showAllPostsInput, len(allUsers))
+                usernamePost = allUsers[showAllPosts]
+                os.system('cls')
+                print("==================================================================")
+                print("              VER TODAS AS PUBLICAÇÕES DE UM USUÁRIO              ")
+                print("==================================================================")
+                print(f"VISUALIZANDO POSTS DE {usernamePost.upper()}")
+                print("==================================================================")
+                msg = {"Function": "GetAllPosts", "Username": usernamePost}
+                reply = SendToServer(msg)
+                postsFound = reply['StatusFoundPosts']
+                if(postsFound == "Found"):
+                    posts = reply['Posts']
+                    for post in posts:
+                        print(post)
+                        print( "------------------------------------------------------------------")
+                    input("Pressione ENTER para voltar para o menu...")
+            else:
+                print("==================================================================")
+                print("       NÃO HÁ USUÁRIOS DISPONÍVEIS PARA VISUALIZAR OS POSTS       ")
+                print("==================================================================")
+                time.sleep(1)
+            os.system('cls')
+            timestampClient = timestampClient + timedelta(seconds=1)
+        elif userOption == "6":
+            Delay()
+            os.system('cls')
+        elif userOption == "7":
+            Advance()
+            os.system('cls')
+        elif userOption == "8":
+            SynchronizeWithServer()
+            os.system('cls')
         elif userOption == "0":
             print("Saindo do sistema...")
             break
         else:
             os.system('cls')
-            timestampClient = timestampClient + timedelta(seconds=1)
 
 t = threading.Thread(target=ReceiveNotifications, daemon=True)
 t.start()

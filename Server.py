@@ -1,6 +1,50 @@
 import zmq
 import msgpack
 from datetime import datetime
+import redis
+import json
+
+# Configuração do Redis
+r = redis.Redis(host='localhost', port=6379, decode_responses=True)
+
+# ---------------------------
+# Funções Redis para dados compartilhados
+# ---------------------------
+
+def add_logged_user(username):
+    if not r.sismember('logged_users', username):
+        r.sadd('logged_users', username)
+        return True
+    return False
+
+def get_logged_users(exclude_username=None):
+    users = list(r.smembers('logged_users'))
+    if exclude_username and exclude_username in users:
+        users.remove(exclude_username)
+    return users
+
+def save_post(username, message):
+    key = f"posts:{username}"
+    r.rpush(key, message)
+
+def get_posts(username):
+    key = f"posts:{username}"
+    return r.lrange(key, 0, -1)
+
+def save_private_message(sender, receiver, message_obj):
+    key_from = f"private:{sender}:{receiver}"
+    key_to = f"private:{receiver}:{sender}"
+    msg_str = json.dumps(message_obj)
+    r.rpush(key_from, msg_str)
+    r.rpush(key_to, msg_str)
+
+def get_private_messages(user, chat_with):
+    key = f"private:{user}:{chat_with}"
+    return [json.loads(m) for m in r.lrange(key, 0, -1)]
+
+# ---------------------------
+# ZMQ setup
+# ---------------------------
 
 context = zmq.Context()
 socket = context.socket(zmq.REP)
@@ -9,16 +53,12 @@ socket.connect("tcp://localhost:5556")
 pub = context.socket(zmq.PUB)
 pub.connect("tcp://localhost:5558") 
 
-logged_users = []
-messages = {}
-privateMessages = {}
+# ---------------------------
+# Lógica do servidor
+# ---------------------------
 
 def ValidateUsername(username):
-    if username in logged_users:
-        return False
-    else:
-        logged_users.append(username)
-        return True
+    return add_logged_user(username)
 
 while True:
     msg_p = socket.recv()
@@ -26,110 +66,81 @@ while True:
     
     function = str(msg["Function"])
 
-    if(function == "ValidateLoggedUser"):
+    if function == "ValidateLoggedUser":
         username = str(msg["Username"])
         usernameIsValid = ValidateUsername(username)
         ans = {"usernameIsValid": usernameIsValid}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-    elif(function == "ShowAllTopics"):
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "ShowAllTopics":
         username = str(msg["Username"])
-        allTopics = list(logged_users)
-        if username in allTopics:
-            allTopics.remove(username)
+        allTopics = get_logged_users(exclude_username=username)
         ans = {"Topics": allTopics}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-    elif(function == "PublishMessage"):
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "PublishMessage":
         username = str(msg["Username"])
         message = str(msg["Message"])
         timestampString = str(msg["Timestamp"])
-        dictionaryMessage = f"{timestampString} {username}: {message}"
-        if username in messages:
-            messages[username].append(message)
-        else:
-            messages[username] = [message]
-        topic = username
+        dictionaryMessage = f"{username} ({timestampString}): {message}"
+
+        save_post(username, dictionaryMessage)
+
         data = f"Username:{username}|Timestamp:{timestampString}|Message:{message}"
-        pub.send_string(f"{topic}: " + data)
+        pub.send_string(f"{username}: " + data)
         ans = {"StatusPublish": "Mensagem publicada"}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-    elif(function == "SendPrivateMessage"):
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "SendPrivateMessage":
         messageTo = str(msg["To"])
         messageFrom = str(msg["From"])
         message = str(msg["Message"])
         timestampString = str(msg["Timestamp"])
+
         messageObj = {
             "Username": messageFrom,
             "Message": message,
             "Timestamp": timestampString,
         }
 
-        if messageFrom in privateMessages:
-            chats = privateMessages[messageFrom]
-            if any(chat['ChatWith'] == messageTo for chat in chats):
-                index = next((i for i, chat in enumerate(chats) if chat['ChatWith'] == messageTo), None)
-                messages = privateMessages[messageFrom][index]["Messages"]
-                messages.append(messageObj)
-            else:
-                newChat = {
-                    "ChatWith": messageTo,
-                    "Messages": [messageObj]
-                }
-                chats.append(newChat)
-        else:
-            privateMessages[messageFrom] = [
-                {
-                    "ChatWith": messageTo,
-                    "Messages": [messageObj]
-                }   
-            ]
-        
-        if messageTo in privateMessages:
-            chats = privateMessages[messageTo]
-            if any(chat['ChatWith'] == messageFrom for chat in chats):
-                index = next((i for i, chat in enumerate(chats) if chat['ChatWith'] == messageFrom), None)
-                messages = privateMessages[messageTo][index]["Messages"]
-                messages.append(messageObj)
-            else:
-                newChat = {
-                    "ChatWith": messageFrom,
-                    "Messages": [messageObj]
-                }
-                chats.append(newChat)
-        else:
-            privateMessages[messageTo] = [
-                {
-                    "ChatWith": messageFrom,
-                    "Messages": [messageObj]
-                }   
-            ]
+        save_private_message(messageFrom, messageTo, messageObj)
 
         topic = "Private" + messageTo
-        data = f"Username:{username}|Timestamp:{timestampString}|Message:{message}"
+        data = f"Username:{messageFrom}|Timestamp:{timestampString}|Message:{message}"
         pub.send_string(f"{topic}: " + data)
         ans = {"StatusSendMessage": "Mensagem enviada"}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-    elif(function == "GetPrivateMessages"):
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "GetPrivateMessages":
         username = str(msg["Username"])
         chatWith = str(msg["ChatWith"])
-        messages = []
-        status = "Not found"
-        if username in privateMessages:
-            allChats = privateMessages[username]
-            if any(chat['ChatWith'] == chatWith for chat in allChats):
-                index = next((i for i, chat in enumerate(allChats) if chat['ChatWith'] == chatWith), None)
-                messages = privateMessages[username][index]["Messages"]
-                status = "Found"
+        messages = get_private_messages(username, chatWith)
+        status = "Found" if messages else "Not found"
         ans = {"StatusFoundMessage": status, "Messages": messages}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-    elif(function == "GetCoordinatorTime"):
-        serverDatetime = datetime.now()
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "GetCoordinatorTime":
+        serverDatetime = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         ans = {"ServerClock": serverDatetime}
         ans_p = msgpack.packb(ans)
         socket.send(ans_p)
-server.close()
-ctx.close()
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+
+    elif function == "GetAllPosts":
+        username = str(msg["Username"])
+        messages = get_posts(username)
+        status = "Found" if messages else "Not found"
+        ans = {"StatusFoundPosts": status, "Posts": messages}
+        ans_p = msgpack.packb(ans)
+        socket.send(ans_p)
+        print(datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
