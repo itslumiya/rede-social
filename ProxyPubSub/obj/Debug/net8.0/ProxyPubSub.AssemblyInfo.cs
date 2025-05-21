@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ProxyPubSub")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bcf4fcf48b80dd459dd1cd0d82774c3b408ba1f2")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0bea40fd3aa01c56df3eb79d7ebaf564510f35c7")]
 [assembly: System.Reflection.AssemblyProductAttribute("ProxyPubSub")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ProxyPubSub")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
