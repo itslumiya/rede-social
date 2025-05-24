@@ -1,5 +1,11 @@
 # 📄 Documentação do Projeto — Rede Social Assíncrona com Pub/Sub
 
+## 👥 Integrantes
+
+Livia Lumi Miyabara – 22.122.045-2 <br>
+Márcio Forner Nepomuceno Almeida – 22.122.040-3 <br>
+Thiago Garcia Santana – 22.122.003-1 <br>
+
 ## 🧩 Funcionalidades da Aplicação
 
 Esta aplicação simula uma **rede social distribuída**, onde usuários e bots podem:
