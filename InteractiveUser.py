@@ -271,6 +271,8 @@ def Menu():
             reply = SendToServer(msg)
             allUsers = reply['Topics']
             allUsers.remove("Fruta")
+            allUsers.remove("ShortNSweet")
+            allUsers.remove("ProgrammingLanguages")
             if(len(allUsers) > 0):
                 for index, user in enumerate(allUsers, start=1):
                     print(f"{index} - {user}")
@@ -333,6 +335,8 @@ def Menu():
             reply = SendToServer(msg)
             allUsers = reply['Topics']
             allUsers.remove("Fruta")
+            allUsers.remove("ShortNSweet")
+            allUsers.remove("ProgrammingLanguages")
             if(len(allUsers) > 0):
                 for index, user in enumerate(allUsers, start=1):
                     print(f"{index} - {user}")
