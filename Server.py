@@ -4,29 +4,6 @@ from datetime import datetime
 import redis
 import json
 import os
-import signal
-import atexit
-import sys
-
-# ---------------------------
-# Função para remover servidor
-# ---------------------------
-
-def cleanup():
-    global idServer
-    print(f"Removendo servidor {idServer} da lista de ativos...")
-    r.srem('active_servers', str(idServer))
-    print("Servidor removido. Saindo...")
-    RecordLog(f"[Desconectando Servidor] Servidor {idServer} desconectado", datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-    
-atexit.register(cleanup)
-
-def signal_handler(sig, frame):
-    cleanup()
-    sys.exit(0)
-
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
 
 # ---------------------------
 # Funções Redis para dados compartilhados
@@ -65,10 +42,6 @@ def get_private_messages(user, chat_with):
     key = f"private:{user}:{chat_with}"
     return [json.loads(m) for m in r.lrange(key, 0, -1)]
 
-# ---------------------------
-# Funções Redis para dados compartilhados
-# ---------------------------
-
 def add_active_server(server_id):
     if not r.sismember('active_servers', server_id):
         r.sadd('active_servers', server_id)
@@ -76,10 +49,7 @@ def add_active_server(server_id):
     return False
 
 def get_active_servers():
-    servers_bytes = r.smembers('active_servers')
-    # Converter de bytes para string
-    servers = [server.decode('utf-8') for server in servers_bytes]
-    return servers
+    return list(r.smembers('active_servers'))
 
 # ---------------------------
 # ZMQ setup
@@ -96,9 +66,6 @@ pub.connect("tcp://localhost:5558")
 # Lógica do servidor
 # ---------------------------
 
-def ValidateUsername(username):
-    return add_logged_user(username)
-
 def RecordLog(message, timestamp):
     global idServer
     os.makedirs("Logs/Servers", exist_ok=True)
@@ -111,6 +78,8 @@ def RecordLog(message, timestamp):
         f.write(f"{timestamp} => {message}" + "\n")
 
 add_logged_user("Fruta")
+add_logged_user("ShortNSweet")
+add_logged_user("ProgrammingLanguages")
 
 while True:
     idServerString = input("Digite qual o número deste servidor: ")
@@ -125,13 +94,10 @@ while True:
         print("Por favor, digite um número válido.")
 
 add_active_server(idServer)
+
 print("Servidor conectado!")
 stringDatetime = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 RecordLog(f"[Conectando Servidor] Servidor {idServer} conectado em {stringDatetime}", datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
-
-atexit.register(cleanup)
-signal.signal(signal.SIGINT, signal_handler)
-signal.signal(signal.SIGTERM, signal_handler)
 
 while True:
     msg_p = socket.recv()
@@ -142,7 +108,7 @@ while True:
 
     if function == "ValidateLoggedUser":
         username = str(msg["Username"])
-        usernameIsValid = ValidateUsername(username)
+        usernameIsValid = add_logged_user(username)
         ans = {"usernameIsValid": usernameIsValid}
         if usernameIsValid:
             RecordLog(f"[ValidateLoggedUser] {username} é válido (não logado ainda)", datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
